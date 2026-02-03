@@ -102,7 +102,7 @@ docker compose -f deploy/docker-compose.8c8g.yml --compatibility up -d --build
 | `MUSIC_QUALITY` | `low/medium/high/lossless` | `low` |
 | `MUSIC_BITRATE` | 直接指定码率（bps，优先级低于 `MUSIC_QUALITY` 预设） | - |
 
-### 封面视频（转码压力主要来源）
+### 封面视频
 
 | 环境变量 | 说明 | 默认值 |
 |---|---|---|
