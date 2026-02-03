@@ -31,7 +31,7 @@ docker compose -f deploy/docker-compose.8c8g.yml --compatibility up -d --build
 ```
 
 说明：
-- 以上 compose 默认使用 **named volume** 存储数据（Windows Docker Desktop 更稳）；Linux 如需落盘宿主机，可改为 `../data:/app/data`。
+- 以上 compose 默认使用 **named volume** 存储数据；Linux 如需落盘宿主机，可改为 `../data:/app/data`。
 - 端口以 compose 里的 `ports` 为准（默认 `3000:3000`）。
 
 ## 配置
