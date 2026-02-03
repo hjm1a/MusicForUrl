@@ -1,0 +1,29 @@
+# Node / build artifacts
+node_modules
+npm-debug.log
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# Runtime data (should be mounted as volume)
+data
+
+# Env files (secrets)
+.env
+.env.*
+
+# VCS / IDE
+.git
+.gitignore
+.idea
+.vscode
+.cursor
+.cursorrules
+.DS_Store
+Thumbs.db
+
+# Archives
+*.zip
+*.tar.gz
+*.tgz
+

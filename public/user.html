@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>个人中心 - MusicForUrl</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/pagination.css">
+</head>
+<body>
+  <div class="container">
+    <div id="header-placeholder"></div>
+
+    <main>
+      <div class="view-header">
+        <a href="/" class="btn-back">← 返回首页</a>
+        <h2>个人中心</h2>
+        <button class="btn btn-ghost" style="margin-left: auto;" onclick="logout()">退出登录</button>
+      </div>
+
+      <div class="personal-center">
+        <div class="tabs">
+          <button class="tab-btn active" id="tabPlaylists" onclick="switchPersonalTab('playlists')">我的歌单</button>
+          <button class="tab-btn" id="tabFavorites" onclick="switchPersonalTab('favorites')">我的收藏</button>
+          <button class="tab-btn" id="tabHistory" onclick="switchPersonalTab('history')">最近播放</button>
+        </div>
+        
+        <div id="playlistsContent" class="tab-content active">
+          <div id="playlistsList"></div>
+          <div id="playlistsPagination" class="pagination"></div>
+        </div>
+
+        <div id="favoritesContent" class="tab-content">
+          <div id="favoritesList"></div>
+          <div id="favoritesPagination" class="pagination"></div>
+        </div>
+        
+        <div id="historyContent" class="tab-content">
+           <div id="historyList"></div>
+           <div id="historyPagination" class="pagination"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div id="footer-placeholder"></div>
+
+  <script src="/js/main.js"></script>
+  <script src="/js/user.js"></script>
+</body>
+</html>

@@ -1,0 +1,312 @@
+# ============================================================================
+# Node.js
+# ============================================================================
+
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+/data
+
+# Build outputs
+/build/
+/dist/
+/out/
+/.next/
+/.nuxt/
+/.output/
+/.vercel/
+
+# Testing
+/coverage/
+
+# Cache
+.npm/
+.eslintcache
+.stylelintcache
+*.tsbuildinfo
+.cache/
+.parcel-cache/
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+lerna-debug.log*
+
+# TypeScript
+*.tsbuildinfo
+
+# Optional: lock files (uncomment if needed)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# ============================================================================
+# IDEs & Editors
+# ============================================================================
+
+# JetBrains (GoLand, IntelliJ IDEA)
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Visual Studio Code
+.vscode/
+*.code-workspace
+
+# Vim / Neovim
+*.swp
+*.swo
+*.swn
+*~
+.netrwhist
+tags
+Session.vim
+.vim/
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
+
+# ============================================================================
+# AI Editors & Assistants
+# ============================================================================
+
+# Cursor IDE
+.cursor/
+.cursorrules
+.cursorignore
+AGENTS.md
+Update.md
+
+# GitHub Copilot
+.copilot/
+.github/copilot/
+
+# Codeium
+.codeium/
+
+# Tabnine
+.tabnine/
+.tabnine_config/
+
+# Amazon CodeWhisperer / Amazon Q
+.aws/codewhisperer/
+.amazonq/
+
+# Windsurf (Codeium)
+.windsurf/
+.windsurfrules
+
+# Aider
+.aider*
+.aider.chat.history.md
+.aider.input.history
+.aider.tags.cache.v3/
+
+# Continue
+.continue/
+.continuerules
+
+# Sourcegraph Cody
+.sourcegraph/
+.cody/
+
+# Replit AI
+.replit
+replit.nix
+
+# Pieces
+.pieces/
+
+# Generic AI/LLM prompts and configs
+prompts/
+*.prompt
+*.prompts
+.ai/
+.llm/
+ai_context/
+.context/
+
+# AI generated temp files
+*.ai.md
+*.ai.txt
+*_ai_generated*
+
+# ============================================================================
+# Environment & Secrets
+# ============================================================================
+
+# Environment files
+.env
+.env.*
+!.env.example
+*.env.local
+*.env.development.local
+*.env.test.local
+*.env.production.local
+
+# Project config (contains database passwords, etc.)
+config/settings.yaml
+
+# Keys and certificates
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+secrets/
+.secrets/
+
+# ============================================================================
+# Operating Systems
+# ============================================================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ============================================================================
+# Documentation (local only)
+# ============================================================================
+
+/docs/
+
+# ============================================================================
+# Project Data Directories
+# ============================================================================
+
+# User uploads
+/data/uploads/
+
+# Runtime logs
+/data/logs/
+
+# Temporary files
+/data/temp/
+/tmp/
+*.tmp
+*.temp
+
+# Export files
+/data/exports/
+
+# ============================================================================
+# Dependencies & Package Managers
+# ============================================================================
+
+# Node.js (for docs service, etc.)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Scalar docs service
+docs/scalar/node_modules/
+docs/scalar/.env
+
+# ============================================================================
+# Docker & Deployment
+# ============================================================================
+
+# Docker
+.docker/
+docker-compose.override.yml
+docker-compose.*.local.yml
+
+# ============================================================================
+# Git
+# ============================================================================
+
+# Git Worktrees
+.worktrees/
+
+# ============================================================================
+# Testing & Coverage
+# ============================================================================
+
+# Coverage reports
+/coverage/
+htmlcov/
+.coverage
+.coverage.*
+
+# Profiling
+*.cpu
+*.mem
+*.trace
+/profiles/
+
+# ============================================================================
+# Logs & Debug
+# ============================================================================
+
+# Log files
+*.log
+logs/
+*.log.*
+
+# Debug files
+*.dump
+core
+core.*
+
+# ============================================================================
+# Miscellaneous
+# ============================================================================
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Archives (usually not committed)
+# *.zip
+# *.tar.gz
+# *.rar
+
+# SQLite databases (if any)
+*.db
+*.sqlite
+*.sqlite3
+
+# Editor lock files
+.~lock.*

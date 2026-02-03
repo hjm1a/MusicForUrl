@@ -1,0 +1,24 @@
+<!-- 首页内容：由 SPA 动态注入到 #appView -->
+<!-- Input Section -->
+<div class="input-section">
+  <div class="input-group">
+    <input type="text" id="playlistInput" placeholder="粘贴网易云歌单链接或ID">
+    <button class="btn btn-primary" id="generateBtn" onclick="generatePlaylist()">生成</button>
+  </div>
+</div>
+
+<!-- Result Section -->
+<div class="result-section" id="resultSection">
+  <div class="playlist-info">
+    <img class="playlist-cover" id="playlistCover" src="/placeholder.svg" alt="" referrerpolicy="no-referrer">
+    <div>
+      <div class="playlist-name" id="playlistName"></div>
+      <div class="playlist-meta" id="playlistMeta"></div>
+    </div>
+  </div>
+  <div class="url-box" id="playlistUrl"></div>
+  <div class="action-buttons">
+    <button class="btn btn-primary" onclick="copyUrl()">复制链接</button>
+    <button class="btn btn-ghost" id="favoriteBtn">收藏</button>
+  </div>
+</div>
