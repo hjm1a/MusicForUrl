@@ -378,16 +378,30 @@ function getSongSegmentInfo(songId) {
   }
 }
 
-async function statIfValidSegment(filePath) { 
-  try { 
-    const stat = await fs.promises.stat(filePath); 
-    if (!stat.isFile()) return null; 
-    if (stat.size <= 1024) return null; 
-    return stat; 
-  } catch (e) { 
-    return null; 
-  } 
-} 
+async function statIfValidSegment(filePath) {
+  try {
+    const stat = await fs.promises.stat(filePath);
+    if (!stat.isFile()) return null;
+    if (stat.size <= 1024) return null;
+    return stat;
+  } catch (e) {
+    return null;
+  }
+}
+
+function formatHttpDate(ms) {
+  try {
+    return new Date(ms).toUTCString();
+  } catch (_) {
+    return new Date().toUTCString();
+  }
+}
+
+function makeWeakEtag(stat) {
+  const size = stat?.size || 0;
+  const mtimeMs = Math.floor(stat?.mtimeMs || Date.now());
+  return `W/\"${size}-${mtimeMs}\"`;
+}
 
 function yieldToEventLoop() {
   return new Promise(resolve => setImmediate(resolve));
@@ -469,6 +483,9 @@ async function cleanupCache(reason = 'interval') {
 
     async function deleteSongDir(info) { 
       try { 
+        if (!info.sizeBytes) {
+          info.sizeBytes = await getSongDirSizeBytes(info.path);
+        }
         await fs.promises.rm(info.path, { recursive: true, force: true }); 
         songSegmentInfo.delete(info.songId); 
         deleted++; 
@@ -1145,6 +1162,16 @@ router.get('/:token/:playlistId/seg/:songId/:segmentIndex.ts', async (req, res) 
   const hitStat = await statIfValidSegment(segmentPath);
   if (hitStat) { 
     if (LOG_VERBOSE) console.log(`[分片命中] ${songId}/${segIndex}`); 
+
+    const etag = makeWeakEtag(hitStat);
+    res.setHeader('ETag', etag);
+    res.setHeader('Last-Modified', formatHttpDate(hitStat.mtimeMs));
+
+    const inm = req.headers['if-none-match'];
+    if (inm && String(inm).trim() === etag) {
+      return res.status(304).end();
+    }
+
     res.setHeader('Content-Length', hitStat.size); 
     const stream = fs.createReadStream(segmentPath); 
     stream.pipe(res); 
@@ -1162,6 +1189,9 @@ router.get('/:token/:playlistId/seg/:songId/:segmentIndex.ts', async (req, res) 
       await generatingLocks.get(lockKey); 
       const generatedStat = await statIfValidSegment(segmentPath);
       if (generatedStat) { 
+        const etag = makeWeakEtag(generatedStat);
+        res.setHeader('ETag', etag);
+        res.setHeader('Last-Modified', formatHttpDate(generatedStat.mtimeMs));
         res.setHeader('Content-Length', generatedStat.size); 
         const stream = fs.createReadStream(segmentPath); 
         stream.pipe(res); 
@@ -1205,6 +1235,9 @@ router.get('/:token/:playlistId/seg/:songId/:segmentIndex.ts', async (req, res) 
        
       const generatedStat = await statIfValidSegment(segmentPath);
       if (generatedStat) { 
+        const etag = makeWeakEtag(generatedStat);
+        res.setHeader('ETag', etag);
+        res.setHeader('Last-Modified', formatHttpDate(generatedStat.mtimeMs));
         res.setHeader('Content-Length', generatedStat.size); 
         const stream = fs.createReadStream(segmentPath); 
         stream.pipe(res); 
@@ -1416,27 +1449,31 @@ router.get('/cache/status', adminAuth, async (req, res) => {
   } 
 }); 
 
-router.delete('/cache', adminAuth, (req, res) => {
-  try {
-    const songDirs = fs.readdirSync(CACHE_DIR);
-    let deleted = 0;
-    
-    for (const songId of songDirs) {
-      const songDir = path.join(CACHE_DIR, songId);
-      const stat = fs.statSync(songDir);
-      
-      if (stat.isDirectory()) {
-        fs.rmSync(songDir, { recursive: true, force: true });
-        deleted++;
-      }
-    }
-    
-    songSegmentInfo.clear();
-    
-    res.json({ success: true, deletedSongs: deleted });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
+router.delete('/cache', adminAuth, async (req, res) => { 
+  try { 
+    const dirents = await fs.promises.readdir(CACHE_DIR, { withFileTypes: true }); 
+    let deleted = 0; 
+     
+    for (let i = 0; i < dirents.length; i++) { 
+      const entry = dirents[i]; 
+      if (!entry.isDirectory()) continue; 
+
+      const songId = String(entry.name); 
+      const songDir = path.join(CACHE_DIR, songId); 
+      try { 
+        await fs.promises.rm(songDir, { recursive: true, force: true }); 
+        deleted++; 
+      } catch (_) {} 
+
+      if (i > 0 && i % 10 === 0) await yieldToEventLoop(); 
+    } 
+     
+    songSegmentInfo.clear(); 
+     
+    res.json({ success: true, deletedSongs: deleted }); 
+  } catch (e) { 
+    res.status(500).json({ error: e?.message || String(e) }); 
+  } 
+}); 
 
 module.exports = router;
