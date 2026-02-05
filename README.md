@@ -47,7 +47,9 @@ docker compose -f deploy/docker-compose.8c8g.yml --compatibility up -d --build
 | `ENCRYPTION_KEY` | Cookie 加密密钥（生产环境必填，建议 32 位字符串） | - |
 | `SITE_PASSWORD` | 站点访问密码（可选） | - |
 | `ADMIN_PASSWORD` | 管理接口密码（可选，用于 `/api/hls/cache/*`） | - |
+| `HLS_ADMIN_ENABLED` | 是否启用 HLS 管理接口（`1/true` 开启；默认关闭；需同时设置 `ADMIN_PASSWORD`） | - |
 | `CACHE_TTL` | 歌单缓存时间（秒） | `86400` |
+| `TOKEN_TTL_HOURS` | 登录 token 有效期（小时） | `168` |
 
 ### 反向代理
 
@@ -64,6 +66,7 @@ docker compose -f deploy/docker-compose.8c8g.yml --compatibility up -d --build
 | `RATE_LIMIT_AUTH` | 认证接口限流 | `10` |
 | `RATE_LIMIT_PARSE` | 歌单解析限流 | `30` |
 | `RATE_LIMIT_HLS_STREAM` | `stream.m3u8` 限流 | `60` |
+| `RATE_LIMIT_HLS_SEGMENT` | `.ts` 分片限流 | `600` |
 
 ### HLS / FFmpeg
 
@@ -75,6 +78,7 @@ docker compose -f deploy/docker-compose.8c8g.yml --compatibility up -d --build
 | `HLS_DOWNLOAD_MAX_SIZE` | 下载最大字节数 | `104857600` |
 | `HLS_FFMPEG_TIMEOUT` | FFmpeg 超时（毫秒） | `180000` |
 | `HLS_FFMPEG_THREADS` | 单个 FFmpeg 进程线程数（0=自动；弱服务器建议 1~2） | `0` |
+| `HLS_SEGMENT_DURATION` | HLS 分片时长（秒） | `10` |
 | `HLS_AUTO_PRELOAD_COUNT` | 自动预加载前 N 首歌 | `1` |
 | `LOG_HLS_VERBOSE` | 输出详细 HLS 日志（`1/true` 开启） | `0` |
 | `PRELOAD_BASE_URL` | “生成链接”时后台预加载调用的 baseUrl（默认 `http://127.0.0.1:$PORT`） | - |
@@ -108,7 +112,7 @@ docker compose -f deploy/docker-compose.8c8g.yml --compatibility up -d --build
 |---|---|---|
 | `COVER_WIDTH` | 输出宽度 | `1920` |
 | `COVER_HEIGHT` | 输出高度 | `1080` |
-| `COVER_FPS` | 帧率（静态封面建议 1~5，可显著降压） | `25` |
+| `COVER_FPS` | 帧率（静态封面建议 1~5，可显著降压） | `5` | 
 | `DEFAULT_COVER_URL` | 默认封面 URL | 内置默认值 |
 
 ### Docker 构建参数（可选）

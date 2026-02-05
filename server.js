@@ -60,15 +60,41 @@ const parseLimiter = rateLimit({
   message: { success: false, message: '解析请求过于频繁，请稍后再试' }
 });
 
+function getHlsTokenFromPath(req) {
+  const p = String(req.path || '');
+  const m = p.match(/^\/([^/]+)\//);
+  return m ? m[1] : '';
+}
+
+function hlsKey(req) {
+  const token = getHlsTokenFromPath(req);
+  return `${req.ip}:${token}`;
+}
+
 const hlsStreamLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: parseInt(process.env.RATE_LIMIT_HLS_STREAM) || 60,
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => {
-    return req.path.endsWith('.ts');
-  },
-  message: '#EXTM3U\n#EXT-X-ERROR:Rate limit exceeded'
+  skip: (req) => !String(req.path || '').endsWith('stream.m3u8'),
+  keyGenerator: hlsKey,
+  handler: (req, res) => {
+    res.status(429);
+    res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+    res.send('#EXTM3U\n#EXT-X-ERROR:Rate limit exceeded');
+  }
+});
+
+const hlsSegmentLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: parseInt(process.env.RATE_LIMIT_HLS_SEGMENT) || 600,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => !String(req.path || '').endsWith('.ts'),
+  keyGenerator: hlsKey,
+  handler: (req, res) => {
+    res.status(429).type('text/plain').send('Rate limit exceeded');
+  }
 });
 
 app.use('/api/', globalLimiter);
@@ -158,7 +184,7 @@ app.use('/api/playlist', require('./routes/playlist'));
 
 app.use('/api/song', require('./routes/song'));
 app.use('/api/img', require('./routes/img'));
-app.use('/api/hls', hlsStreamLimiter, require('./routes/hls'));
+app.use('/api/hls', hlsStreamLimiter, hlsSegmentLimiter, require('./routes/hls'));
 app.use('/api/favorites', require('./routes/favorite'));
 app.use('/api/history', require('./routes/history'));
 

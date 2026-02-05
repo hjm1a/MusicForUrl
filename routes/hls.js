@@ -24,23 +24,30 @@ function isValidSegmentIndex(index) {
 }
 
 function adminAuth(req, res, next) {
-  const adminPassword = process.env.ADMIN_PASSWORD;
-  
-  if (!adminPassword) {
-    if (process.env.NODE_ENV === 'production') {
-      return res.status(503).json({ 
-        error: '管理接口已禁用', 
-        message: '生产环境需要配置 ADMIN_PASSWORD 才能使用管理接口' 
-      });
-    }
-    return next();
+  const adminEnabled =
+    process.env.HLS_ADMIN_ENABLED === '1' ||
+    process.env.HLS_ADMIN_ENABLED === 'true';
+
+  if (!adminEnabled) {
+    return res.status(503).json({
+      error: '管理接口已禁用',
+      message: '需要显式设置 HLS_ADMIN_ENABLED=1 并配置 ADMIN_PASSWORD 才能启用管理接口'
+    });
   }
-  
+
+  const adminPassword = process.env.ADMIN_PASSWORD;
+  if (!adminPassword) {
+    return res.status(503).json({
+      error: '管理接口已禁用',
+      message: '请配置 ADMIN_PASSWORD 后再启用管理接口'
+    });
+  }
+
   const providedPassword = req.headers['x-admin-password'];
   if (providedPassword !== adminPassword) {
     return res.status(401).json({ error: '管理员密码错误或未提供' });
   }
-  
+
   next();
 }
 
@@ -68,6 +75,16 @@ const maxAgeHoursFromEnv = envNumber('HLS_CACHE_MAX_AGE_HOURS');
 const cleanupIntervalMinutesFromEnv = envNumber('HLS_CACHE_CLEANUP_INTERVAL_MINUTES');
 const cleanupTargetRatioFromEnv = envNumber('HLS_CACHE_CLEANUP_TARGET_RATIO');
 
+function parseSegmentDuration() {
+  const raw = process.env.HLS_SEGMENT_DURATION;
+  if (raw == null || raw === '') return 10;
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n)) return 10;
+  if (n < 4) return 4;
+  if (n > 60) return 60;
+  return n;
+}
+
 const CACHE_CONFIG = {
   maxAge: (Number.isFinite(maxAgeHoursFromEnv) && maxAgeHoursFromEnv > 0)
     ? Math.floor(maxAgeHoursFromEnv * 60 * 60 * 1000)
@@ -84,7 +101,7 @@ const CACHE_CONFIG = {
     ? cleanupTargetRatioFromEnv
     : 0.8,
   autoPreloadCount: parseInt(process.env.HLS_AUTO_PRELOAD_COUNT, 10) || 1,
-  segmentDuration: 10,
+  segmentDuration: parseSegmentDuration(),
 };
 
 const LOG_VERBOSE = process.env.LOG_HLS_VERBOSE === '1' || process.env.LOG_HLS_VERBOSE === 'true';
@@ -102,10 +119,10 @@ const COVER_OUTPUT = {
 
 const COVER_FPS = (() => {
   const raw = process.env.COVER_FPS;
-  if (raw == null || raw === '') return 25;
+  if (raw == null || raw === '') return 5;
   const n = parseInt(raw, 10);
   if (Number.isFinite(n) && n >= 1 && n <= 30) return n;
-  return 25;
+  return 5;
 })();
 
 const HLS_FFMPEG_THREADS = (() => {
@@ -164,6 +181,9 @@ function parseExtraAllowPatterns() {
 }
 
 const DOWNLOAD_ALLOW_PATTERNS = [...DEFAULT_DOWNLOAD_ALLOW_PATTERNS, ...parseExtraAllowPatterns()];
+
+const HTTP_AGENT = new http.Agent({ keepAlive: true, maxSockets: 50 });
+const HTTPS_AGENT = new https.Agent({ keepAlive: true, maxSockets: 50 });
 
 function isDownloadUrlAllowed(urlStr) {
   let u;
@@ -324,25 +344,23 @@ function getSegmentInfoPath(songId) {
   return path.join(getSongCacheDir(songId), 'info.json');
 }
 
-function isSongCached(songId) {
-  try {
-    const infoPath = getSegmentInfoPath(songId);
-    if (!fs.existsSync(infoPath)) return false;
-    
-    const info = JSON.parse(fs.readFileSync(infoPath, 'utf8'));
-    if (info.version !== CACHE_VERSION) return false;
-    if (!info.video || info.video.width !== COVER_OUTPUT.width || info.video.height !== COVER_OUTPUT.height) return false;
-    const age = Date.now() - info.timestamp;
-    if (age > CACHE_CONFIG.maxAge) return false;
-    
-    for (let i = 0; i < info.segmentCount; i++) {
-      if (!fs.existsSync(getSegmentPath(songId, i))) return false;
-    }
-    return true;
-  } catch (e) {
-    return false;
-  }
-}
+function isSongCached(songId) { 
+  try { 
+    const infoPath = getSegmentInfoPath(songId); 
+    if (!fs.existsSync(infoPath)) return false; 
+     
+    const info = JSON.parse(fs.readFileSync(infoPath, 'utf8')); 
+    if (info.version !== CACHE_VERSION) return false; 
+    if (!info.video || info.video.width !== COVER_OUTPUT.width || info.video.height !== COVER_OUTPUT.height) return false; 
+    const age = Date.now() - info.timestamp; 
+    if (age > CACHE_CONFIG.maxAge) return false; 
+
+    const count = parseInt(info.segmentCount, 10) || 0;
+    return count > 0;
+  } catch (e) { 
+    return false; 
+  } 
+} 
 
 function getSongSegmentInfo(songId) {
   const key = String(songId);
@@ -360,150 +378,170 @@ function getSongSegmentInfo(songId) {
   }
 }
 
-function isSegmentValid(songId, segmentIndex) {
+async function statIfValidSegment(filePath) { 
+  try { 
+    const stat = await fs.promises.stat(filePath); 
+    if (!stat.isFile()) return null; 
+    if (stat.size <= 1024) return null; 
+    return stat; 
+  } catch (e) { 
+    return null; 
+  } 
+} 
+
+function yieldToEventLoop() {
+  return new Promise(resolve => setImmediate(resolve));
+}
+
+async function safeReadJson(filePath) {
   try {
-    const segPath = getSegmentPath(songId, segmentIndex);
-    const stat = fs.statSync(segPath);
-    return stat.isFile() && stat.size > 1024;
+    const raw = await fs.promises.readFile(filePath, 'utf8');
+    return JSON.parse(raw);
   } catch (e) {
-    return false;
+    return null;
   }
 }
 
-function getSongDirSize(songDir) {
+async function getSongDirSizeBytes(songDir) {
   try {
-    const files = fs.readdirSync(songDir);
+    const files = await fs.promises.readdir(songDir, { withFileTypes: true });
     let totalSize = 0;
-    for (const file of files) {
-      const filePath = path.join(songDir, file);
-      const stat = fs.statSync(filePath);
-      if (stat.isFile()) {
-        totalSize += stat.size;
-      }
-    }
-    return totalSize;
-  } catch (e) {
-    return 0;
-  }
-}
-
-function getCacheSize() {
-  try {
-    const songDirs = fs.readdirSync(CACHE_DIR);
-    let totalSize = 0;
-    for (const songId of songDirs) {
-      const songDir = path.join(CACHE_DIR, songId);
-      const stat = fs.statSync(songDir);
-      if (stat.isDirectory()) {
-        totalSize += getSongDirSize(songDir);
-      }
-    }
-    return totalSize;
-  } catch (e) {
-    return 0;
-  }
-}
-
-let cacheCleanupRunning = false;
-let cacheCleanupScheduled = false;
-
-function cleanupCache(reason = 'interval') {
-  if (cacheCleanupRunning) return;
-  cacheCleanupRunning = true;
-  try {
-    const songDirs = fs.readdirSync(CACHE_DIR);
-    const songInfos = [];
-    let totalSize = 0;
-    
-    for (const songIdRaw of songDirs) {
-      const songId = String(songIdRaw);
-      if (generatingLocks.has(songId)) continue;
-      
-      const songDir = path.join(CACHE_DIR, songId);
+    for (const entry of files) {
+      if (!entry.isFile()) continue;
       try {
-        const stat = fs.statSync(songDir);
-        if (!stat.isDirectory()) continue;
-        
-        const infoPath = path.join(songDir, 'info.json');
-        let timestamp = stat.mtimeMs;
-        
-        if (fs.existsSync(infoPath)) {
-          try {
-            const info = JSON.parse(fs.readFileSync(infoPath, 'utf8'));
-            timestamp = info.timestamp || timestamp;
-          } catch (e) {}
-        }
-        
-        const size = getSongDirSize(songDir);
-        songInfos.push({
-          songId,
-          path: songDir,
-          size,
-          timestamp
-        });
-        totalSize += size;
-      } catch (e) {}
+        const stat = await fs.promises.stat(path.join(songDir, entry.name));
+        totalSize += stat.size;
+      } catch (_) {}
     }
-    
-    const now = Date.now();
-    let deleted = 0;
-    let freedSize = 0;
-    
-    for (const info of songInfos) {
-      if (now - info.timestamp > CACHE_CONFIG.maxAge) {
-        try {
-          fs.rmSync(info.path, { recursive: true, force: true });
-          songSegmentInfo.delete(info.songId);
-          totalSize -= info.size;
-          freedSize += info.size;
-          deleted++;
-        } catch (e) {
-          console.error(`删除过期缓存失败 ${info.songId}:`, e.message);
-        }
-      }
-    }
-    
-    if (totalSize > CACHE_CONFIG.maxSize) {
-      const targetSize = CACHE_CONFIG.maxSize * CACHE_CONFIG.cleanupToRatio;
-      
-      const remaining = songInfos
-        .filter(s => fs.existsSync(s.path))
-        .sort((a, b) => a.timestamp - b.timestamp);
-      
-      for (const info of remaining) {
-        if (totalSize <= targetSize) break;
-        if (generatingLocks.has(info.songId)) continue;
-        try {
-          fs.rmSync(info.path, { recursive: true, force: true });
-          songSegmentInfo.delete(info.songId);
-          totalSize -= info.size;
-          freedSize += info.size;
-          deleted++;
-        } catch (e) {}
-      }
-    }
-    
-    if (deleted > 0) {
-      console.log(`缓存清理完成(${reason})，删除了 ${deleted} 首歌曲缓存，释放 ${(freedSize / 1024 / 1024).toFixed(2)} MB`);
-    }
+    return totalSize;
   } catch (e) {
-    console.error('缓存清理失败:', e.message);
-  } finally {
-    cacheCleanupRunning = false;
+    return 0;
   }
 }
+ 
+let cacheCleanupRunning = false; 
+let cacheCleanupScheduled = false; 
+ 
+async function cleanupCache(reason = 'interval') { 
+  if (cacheCleanupRunning) return; 
+  cacheCleanupRunning = true; 
+  try { 
+    const dirents = await fs.promises.readdir(CACHE_DIR, { withFileTypes: true }); 
+    const songInfos = []; 
 
-function scheduleCacheCleanup(reason = 'scheduled') {
-  if (cacheCleanupScheduled) return;
-  cacheCleanupScheduled = true;
-  setTimeout(() => {
-    cacheCleanupScheduled = false;
-    cleanupCache(reason);
-  }, 1000);
-}
+    for (let i = 0; i < dirents.length; i++) { 
+      const entry = dirents[i]; 
+      if (!entry.isDirectory()) continue; 
+      const songId = String(entry.name); 
+      if (generatingLocks.has(songId)) continue; 
 
-setInterval(cleanupCache, CACHE_CONFIG.cleanupInterval);
-setTimeout(() => scheduleCacheCleanup('startup'), 5000);
+      const songDir = path.join(CACHE_DIR, songId); 
+      const infoPath = path.join(songDir, 'info.json'); 
+
+      let timestamp = 0; 
+      let sizeBytes = 0; 
+
+      const info = await safeReadJson(infoPath); 
+      if (info) { 
+        timestamp = Number(info.timestamp) || 0; 
+        sizeBytes = Number(info.cacheBytes) || 0; 
+      } 
+
+      if (!timestamp) { 
+        try { 
+          const stat = await fs.promises.stat(songDir); 
+          timestamp = stat.mtimeMs || 0; 
+        } catch (_) { 
+          continue; 
+        } 
+      } 
+
+      songInfos.push({ songId, path: songDir, timestamp, sizeBytes }); 
+
+      if (i > 0 && i % 25 === 0) { 
+        await yieldToEventLoop(); 
+      } 
+    } 
+
+    const now = Date.now(); 
+    let deleted = 0; 
+    let freedSize = 0; 
+
+    async function deleteSongDir(info) { 
+      try { 
+        await fs.promises.rm(info.path, { recursive: true, force: true }); 
+        songSegmentInfo.delete(info.songId); 
+        deleted++; 
+        const freed = Number(info.sizeBytes) || 0; 
+        freedSize += freed; 
+        return freed; 
+      } catch (e) { 
+        console.error(`删除过期缓存失败 ${info.songId}:`, e?.message || e); 
+        return 0; 
+      } 
+    } 
+
+    const remaining = []; 
+    for (let i = 0; i < songInfos.length; i++) { 
+      const info = songInfos[i]; 
+      if (now - info.timestamp > CACHE_CONFIG.maxAge) { 
+        await deleteSongDir(info); 
+      } else { 
+        remaining.push(info); 
+      } 
+      if (i > 0 && i % 20 === 0) await yieldToEventLoop(); 
+    } 
+
+    // 计算总大小：优先使用 info.json 里的 cacheBytes，否则才扫描目录
+    let totalSize = 0; 
+    for (let i = 0; i < remaining.length; i++) { 
+      const info = remaining[i]; 
+      if (!info.sizeBytes) { 
+        info.sizeBytes = await getSongDirSizeBytes(info.path); 
+      } 
+      totalSize += info.sizeBytes; 
+      if (i > 0 && i % 10 === 0) await yieldToEventLoop(); 
+    } 
+
+    if (totalSize > CACHE_CONFIG.maxSize) { 
+      const targetSize = CACHE_CONFIG.maxSize * CACHE_CONFIG.cleanupToRatio; 
+      remaining.sort((a, b) => a.timestamp - b.timestamp); 
+
+      for (let i = 0; i < remaining.length; i++) { 
+        if (totalSize <= targetSize) break; 
+        const info = remaining[i]; 
+        if (generatingLocks.has(info.songId)) continue; 
+        const freed = await deleteSongDir(info); 
+        totalSize -= freed || 0; 
+        if (i > 0 && i % 10 === 0) await yieldToEventLoop(); 
+      } 
+    } 
+
+    if (deleted > 0) { 
+      console.log(`缓存清理完成(${reason})，删除了 ${deleted} 首歌曲缓存，释放 ${(freedSize / 1024 / 1024).toFixed(2)} MB`); 
+    } 
+  } catch (e) { 
+    console.error('缓存清理失败:', e?.message || e); 
+  } finally { 
+    cacheCleanupRunning = false; 
+  } 
+} 
+
+function scheduleCacheCleanup(reason = 'scheduled') { 
+  if (cacheCleanupScheduled) return; 
+  cacheCleanupScheduled = true; 
+  setTimeout(() => { 
+    cacheCleanupScheduled = false; 
+    cleanupCache(reason).catch((e) => {
+      console.error('缓存清理失败:', e?.message || e);
+    }); 
+  }, 1000); 
+} 
+ 
+setInterval(() => {
+  cleanupCache('interval').catch(() => {});
+}, CACHE_CONFIG.cleanupInterval); 
+setTimeout(() => scheduleCacheCleanup('startup'), 5000); 
 
 async function generateSongSegments(songId, audioUrl, coverUrl, songDuration) {
   const acquired = await jobSemaphore.acquire();
@@ -665,26 +703,32 @@ function runFFmpegTranscode({ songId, timestamp, tempAudio, tempCover, tempM3u8,
           }
         }
         
-        const tempFiles = fs.readdirSync(TEMP_DIR);
-        const segmentFiles = tempFiles
-          .filter(f => f.startsWith(`${songId}_${timestamp}_seg_`) && f.endsWith('.ts'))
-          .sort();
-        
-        for (let i = 0; i < segmentFiles.length; i++) {
-          const srcPath = path.join(TEMP_DIR, segmentFiles[i]);
-          const destPath = getSegmentPath(songId, i);
-          fs.renameSync(srcPath, destPath);
-        }
-        
-        const info = {
-          version: CACHE_VERSION,
-          songId: songId,
-          segmentCount: segmentFiles.length,
-          segmentDurations: segmentDurations,
-          totalDuration: segmentDurations.reduce((a, b) => a + b, 0),
-          video: { width: COVER_OUTPUT.width, height: COVER_OUTPUT.height },
-          timestamp: Date.now()
-        };
+        const tempFiles = fs.readdirSync(TEMP_DIR); 
+        const segmentFiles = tempFiles 
+          .filter(f => f.startsWith(`${songId}_${timestamp}_seg_`) && f.endsWith('.ts')) 
+          .sort(); 
+
+        let cacheBytes = 0;
+        for (let i = 0; i < segmentFiles.length; i++) { 
+          const srcPath = path.join(TEMP_DIR, segmentFiles[i]); 
+          const destPath = getSegmentPath(songId, i); 
+          try { 
+            const stat = fs.statSync(srcPath); 
+            cacheBytes += stat.size || 0; 
+          } catch (_) {} 
+          fs.renameSync(srcPath, destPath); 
+        } 
+         
+        const info = { 
+          version: CACHE_VERSION, 
+          songId: songId, 
+          segmentCount: segmentFiles.length, 
+          segmentDurations: segmentDurations, 
+          totalDuration: segmentDurations.reduce((a, b) => a + b, 0), 
+          cacheBytes,
+          video: { width: COVER_OUTPUT.width, height: COVER_OUTPUT.height }, 
+          timestamp: Date.now() 
+        }; 
         fs.writeFileSync(getSegmentInfoPath(songId), JSON.stringify(info));
         
         songSegmentInfo.set(String(songId), info);
@@ -812,14 +856,16 @@ function downloadFile(url, filePath, redirectCount = 0) {
       return reject(new Error(`Download blocked: ${urlCheck.reason}`));
     }
     
-    const protocol = url.startsWith('https') ? https : http;
-    const options = {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Referer': 'https://music.163.com/'
-      },
-      timeout: JOB_LIMITS.downloadTimeout
-    };
+    const isHttps = /^https:/i.test(url);
+    const protocol = isHttps ? https : http; 
+    const options = { 
+      headers: { 
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 
+        'Referer': 'https://music.163.com/' 
+      }, 
+      agent: isHttps ? HTTPS_AGENT : HTTP_AGENT,
+      timeout: JOB_LIMITS.downloadTimeout 
+    }; 
     
     const file = fs.createWriteStream(filePath);
     let downloadedSize = 0;
@@ -1094,33 +1140,33 @@ router.get('/:token/:playlistId/seg/:songId/:segmentIndex.ts', async (req, res) 
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cache-Control', 'public, max-age=86400');
   
-  const segmentPath = getSegmentPath(songId, segIndex);
-  
-  if (isSegmentValid(songId, segIndex)) {
-    if (LOG_VERBOSE) console.log(`[分片命中] ${songId}/${segIndex}`);
-    const stat = fs.statSync(segmentPath);
-    res.setHeader('Content-Length', stat.size);
-    const stream = fs.createReadStream(segmentPath);
-    stream.pipe(res);
-    
-    if (segIndex === 0) {
-      setImmediate(() => preloadNextSongs(playlistId, songId, cookie));
-    }
-    return;
-  }
+  const segmentPath = getSegmentPath(songId, segIndex); 
+
+  const hitStat = await statIfValidSegment(segmentPath);
+  if (hitStat) { 
+    if (LOG_VERBOSE) console.log(`[分片命中] ${songId}/${segIndex}`); 
+    res.setHeader('Content-Length', hitStat.size); 
+    const stream = fs.createReadStream(segmentPath); 
+    stream.pipe(res); 
+     
+    if (segIndex === 0) { 
+      setImmediate(() => preloadNextSongs(playlistId, songId, cookie)); 
+    } 
+    return; 
+  } 
   
   const lockKey = String(songId);
   if (generatingLocks.has(lockKey)) {
     console.log(`[等待分片生成] ${songId}`);
-    try {
-      await generatingLocks.get(lockKey);
-      if (isSegmentValid(songId, segIndex)) {
-        const stat = fs.statSync(segmentPath);
-        res.setHeader('Content-Length', stat.size);
-        const stream = fs.createReadStream(segmentPath);
-        stream.pipe(res);
-
-        if (segIndex === 0) {
+    try { 
+      await generatingLocks.get(lockKey); 
+      const generatedStat = await statIfValidSegment(segmentPath);
+      if (generatedStat) { 
+        res.setHeader('Content-Length', generatedStat.size); 
+        const stream = fs.createReadStream(segmentPath); 
+        stream.pipe(res); 
+ 
+        if (segIndex === 0) { 
           setImmediate(() => preloadNextSongs(playlistId, songId, cookie));
         }
         return;
@@ -1154,16 +1200,16 @@ router.get('/:token/:playlistId/seg/:songId/:segmentIndex.ts', async (req, res) 
     generatingLocks.set(lockKey, generatePromise);
     
     try {
-      await generatePromise;
-      generatingLocks.delete(lockKey);
-      
-      if (isSegmentValid(songId, segIndex)) {
-        const stat = fs.statSync(segmentPath);
-        res.setHeader('Content-Length', stat.size);
-        const stream = fs.createReadStream(segmentPath);
-        stream.pipe(res);
-        
-        if (segIndex === 0) {
+      await generatePromise; 
+      generatingLocks.delete(lockKey); 
+       
+      const generatedStat = await statIfValidSegment(segmentPath);
+      if (generatedStat) { 
+        res.setHeader('Content-Length', generatedStat.size); 
+        const stream = fs.createReadStream(segmentPath); 
+        stream.pipe(res); 
+         
+        if (segIndex === 0) { 
           setImmediate(() => preloadNextSongs(playlistId, songId, cookie));
         }
       } else {
@@ -1293,67 +1339,82 @@ router.post('/:token/:playlistId/preload', async (req, res) => {
   }
 });
 
-router.get('/cache/status', adminAuth, (req, res) => {
-  try {
-    const songDirs = fs.readdirSync(CACHE_DIR);
-    let totalSize = 0;
-    const cachedSongs = [];
-    
-    for (const songId of songDirs) {
-      const songDir = path.join(CACHE_DIR, songId);
-      const stat = fs.statSync(songDir);
-      
-      if (stat.isDirectory()) {
-        const infoPath = path.join(songDir, 'info.json');
-        let segmentCount = 0;
-        let songSize = 0;
-        let age = 0;
-        
-        if (fs.existsSync(infoPath)) {
-          const info = JSON.parse(fs.readFileSync(infoPath, 'utf8'));
-          segmentCount = info.segmentCount || 0;
-          age = Math.round((Date.now() - info.timestamp) / 1000 / 60);
-        }
-        
-        const files = fs.readdirSync(songDir);
-        for (const f of files) {
-          const fStat = fs.statSync(path.join(songDir, f));
-          songSize += fStat.size;
-        }
-        totalSize += songSize;
-        
-        cachedSongs.push({
-          songId,
-          segments: segmentCount,
-          size: (songSize / 1024 / 1024).toFixed(2) + ' MB',
-          age: age + ' minutes'
-        });
-      }
-    }
-    
-    res.json({
-      cache: {
-        totalSongs: cachedSongs.length,
-        totalSize: (totalSize / 1024 / 1024).toFixed(2) + ' MB',
-        maxSize: (CACHE_CONFIG.maxSize / 1024 / 1024 / 1024).toFixed(2) + ' GB',
-      },
-      jobs: {
-        running: jobSemaphore.running,
-        waiting: jobSemaphore.waiting,
-        maxConcurrent: JOB_LIMITS.maxConcurrentJobs,
-        maxQueue: JOB_LIMITS.maxQueueSize
-      },
-      config: {
-        downloadTimeout: JOB_LIMITS.downloadTimeout + 'ms',
-        downloadMaxSize: (JOB_LIMITS.downloadMaxSize / 1024 / 1024).toFixed(2) + ' MB',
-        ffmpegTimeout: JOB_LIMITS.ffmpegTimeout + 'ms'
-      },
-      songs: cachedSongs.slice(0, 50)
-    });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
+router.get('/cache/status', adminAuth, async (req, res) => { 
+  try { 
+    const dirents = await fs.promises.readdir(CACHE_DIR, { withFileTypes: true }); 
+    let totalSize = 0; 
+    let totalSongs = 0; 
+    const cachedSongs = []; 
+     
+    for (let i = 0; i < dirents.length; i++) { 
+      const entry = dirents[i]; 
+      if (!entry.isDirectory()) continue; 
+      totalSongs++; 
+
+      const songId = String(entry.name); 
+      const songDir = path.join(CACHE_DIR, songId); 
+      const infoPath = path.join(songDir, 'info.json'); 
+
+      let segmentCount = 0; 
+      let songSize = 0; 
+      let timestamp = 0; 
+
+      const info = await safeReadJson(infoPath); 
+      if (info) { 
+        segmentCount = info.segmentCount || 0; 
+        songSize = Number(info.cacheBytes) || 0; 
+        timestamp = Number(info.timestamp) || 0; 
+      } 
+
+      if (!timestamp) { 
+        try { 
+          const stat = await fs.promises.stat(songDir); 
+          timestamp = stat.mtimeMs || 0; 
+        } catch (_) {} 
+      } 
+
+      if (!songSize) { 
+        songSize = await getSongDirSizeBytes(songDir); 
+      } 
+
+      totalSize += songSize; 
+
+      if (cachedSongs.length < 50) { 
+        const ageMin = timestamp ? Math.round((Date.now() - timestamp) / 1000 / 60) : 0; 
+        cachedSongs.push({ 
+          songId, 
+          segments: segmentCount, 
+          size: (songSize / 1024 / 1024).toFixed(2) + ' MB', 
+          age: ageMin + ' minutes' 
+        }); 
+      } 
+
+      if (i > 0 && i % 25 === 0) await yieldToEventLoop(); 
+    } 
+     
+    res.json({ 
+      cache: { 
+        totalSongs, 
+        totalSize: (totalSize / 1024 / 1024).toFixed(2) + ' MB', 
+        maxSize: (CACHE_CONFIG.maxSize / 1024 / 1024 / 1024).toFixed(2) + ' GB', 
+      }, 
+      jobs: { 
+        running: jobSemaphore.running, 
+        waiting: jobSemaphore.waiting, 
+        maxConcurrent: JOB_LIMITS.maxConcurrentJobs, 
+        maxQueue: JOB_LIMITS.maxQueueSize 
+      }, 
+      config: { 
+        downloadTimeout: JOB_LIMITS.downloadTimeout + 'ms', 
+        downloadMaxSize: (JOB_LIMITS.downloadMaxSize / 1024 / 1024).toFixed(2) + ' MB', 
+        ffmpegTimeout: JOB_LIMITS.ffmpegTimeout + 'ms' 
+      }, 
+      songs: cachedSongs 
+    }); 
+  } catch (e) { 
+    res.status(500).json({ error: e?.message || String(e) }); 
+  } 
+}); 
 
 router.delete('/cache', adminAuth, (req, res) => {
   try {

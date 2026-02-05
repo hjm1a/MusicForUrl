@@ -7,6 +7,9 @@ const MAX_BYTES = 6 * 1024 * 1024;
 const TIMEOUT_MS = 12_000;
 const MAX_REDIRECTS = 3;
 
+const HTTP_AGENT = new http.Agent({ keepAlive: true, maxSockets: 50 });
+const HTTPS_AGENT = new https.Agent({ keepAlive: true, maxSockets: 50 });
+
 function isAllowedHost(hostname) {
   return /^p\d+\.music\.126\.net$/i.test(hostname);
 }
@@ -16,7 +19,8 @@ function proxyImage(url, res, redirectCount = 0) {
     if (redirectCount > MAX_REDIRECTS) return reject(new Error('Too many redirects'));
 
     const u = new URL(url);
-    const protocol = u.protocol === 'https:' ? https : http;
+    const isHttps = u.protocol === 'https:';
+    const protocol = isHttps ? https : http;
 
     const req = protocol.get(url, {
       headers: {
@@ -24,6 +28,7 @@ function proxyImage(url, res, redirectCount = 0) {
         'Referer': 'https://music.163.com/',
         'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8'
       },
+      agent: isHttps ? HTTPS_AGENT : HTTP_AGENT,
       timeout: TIMEOUT_MS
     }, (r) => {
       if ([301, 302, 303, 307, 308].includes(r.statusCode)) {

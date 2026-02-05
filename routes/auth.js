@@ -8,6 +8,22 @@ const qrCodeSessions = new Map();
 const QR_SESSION_MAX = 500;
 const QR_SESSION_TTL = 3 * 60 * 1000;
 
+function tokenTtlHours() {
+  const raw = parseInt(process.env.TOKEN_TTL_HOURS, 10);
+  if (Number.isFinite(raw) && raw > 0) return Math.min(raw, 24 * 365);
+  return 168;
+}
+
+function toSqliteDatetime(date) {
+  return date.toISOString().slice(0, 19).replace('T', ' ');
+}
+
+function computeTokenExpiresAt() {
+  const hours = tokenTtlHours();
+  const expires = new Date(Date.now() + hours * 60 * 60 * 1000);
+  return toSqliteDatetime(expires);
+}
+
 setInterval(() => {
   const now = Date.now();
   for (const [key, value] of qrCodeSessions.entries()) {
@@ -55,6 +71,7 @@ router.get('/qrcode/check', async (req, res) => {
       }
       
       const token = generateToken();
+      const token_expires_at = computeTokenExpiresAt();
       
       userOps.upsert.run({
         netease_id: String(status.userId),
@@ -62,7 +79,8 @@ router.get('/qrcode/check', async (req, res) => {
         avatar: status.avatar,
         vip_type: status.vipType,
         cookie: encrypt(result.cookie),
-        token
+        token,
+        token_expires_at
       });
       
       return res.json({
@@ -119,6 +137,7 @@ router.post('/login/captcha', async (req, res) => {
     const status = await netease.checkLoginStatus(result.cookie);
     
     const token = generateToken();
+    const token_expires_at = computeTokenExpiresAt();
     
     userOps.upsert.run({
       netease_id: String(status.userId),
@@ -126,7 +145,8 @@ router.post('/login/captcha', async (req, res) => {
       avatar: status.avatar,
       vip_type: status.vipType,
       cookie: encrypt(result.cookie),
-      token
+      token,
+      token_expires_at
     });
     
     res.json({
@@ -158,6 +178,7 @@ router.post('/login/password', async (req, res) => {
     const status = await netease.checkLoginStatus(result.cookie);
     
     const token = generateToken();
+    const token_expires_at = computeTokenExpiresAt();
     
     userOps.upsert.run({
       netease_id: String(status.userId),
@@ -165,7 +186,8 @@ router.post('/login/password', async (req, res) => {
       avatar: status.avatar,
       vip_type: status.vipType,
       cookie: encrypt(result.cookie),
-      token
+      token,
+      token_expires_at
     });
     
     res.json({
@@ -200,6 +222,7 @@ router.post('/login/cookie', async (req, res) => {
     }
     
     const token = generateToken();
+    const token_expires_at = computeTokenExpiresAt();
     
     userOps.upsert.run({
       netease_id: String(status.userId),
@@ -207,7 +230,8 @@ router.post('/login/cookie', async (req, res) => {
       avatar: status.avatar,
       vip_type: status.vipType,
       cookie: encrypt(cookie),
-      token
+      token,
+      token_expires_at
     });
     
     res.json({
@@ -260,7 +284,8 @@ router.post('/logout', (req, res) => {
     const user = userOps.getByToken.get(token);
     if (user) {
       const newToken = generateToken();
-      userOps.rotateToken.run(newToken, '', user.id);
+      const expiredAt = toSqliteDatetime(new Date());
+      userOps.rotateToken.run(newToken, '', expiredAt, user.id);
     }
   }
   
