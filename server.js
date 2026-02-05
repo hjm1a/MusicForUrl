@@ -6,6 +6,7 @@ const compression = require('compression');
 const crypto = require('crypto');
 const path = require('path');
 const rateLimit = require('express-rate-limit');
+const { ipKeyGenerator } = rateLimit;
 require('./lib/db');
 
 const app = express();
@@ -68,7 +69,7 @@ function getHlsTokenFromPath(req) {
 
 function hlsKey(req) {
   const token = getHlsTokenFromPath(req);
-  return `${req.ip}:${token}`;
+  return `${ipKeyGenerator(req)}:${token}`;
 }
 
 const hlsStreamLimiter = rateLimit({

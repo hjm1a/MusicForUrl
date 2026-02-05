@@ -25,6 +25,8 @@ const SPA_VIEW_CONTAINER_ID = 'appView';
 const SPA_VIEW_CACHE = new Map();
 let lastAutoPlayId = null;
 let lastGeneratedUrl = '';
+let lastGeneratedUrls = [];
+let selectedGeneratedUrlType = 'hls';
 
 function hasSpaContainer() {
   return !!document.getElementById(SPA_VIEW_CONTAINER_ID);
@@ -135,15 +137,64 @@ function maybeRestoreHomeState() {
     const cover = document.getElementById('playlistCover');
     const name = document.getElementById('playlistName');
     const meta = document.getElementById('playlistMeta');
-    const url = document.getElementById('playlistUrl');
+    const urlOptions = document.getElementById('playlistUrlOptions');
 
     if (cover) cover.src = imageSrc(currentPlaylist.cover);
     if (name) name.textContent = currentPlaylist.name || '';
     if (meta) meta.textContent = `共 ${currentPlaylist.songCount} 首`;
-    if (url) url.textContent = lastGeneratedUrl;
+    if (urlOptions) renderGeneratedUrlOptions();
     result.classList.add('show');
     updateFavoriteBtn();
   }
+}
+
+function getSelectedGeneratedUrl() {
+  if (Array.isArray(lastGeneratedUrls) && lastGeneratedUrls.length) {
+    const picked =
+      lastGeneratedUrls.find(u => u && u.type === selectedGeneratedUrlType) ||
+      lastGeneratedUrls[0];
+    if (picked && picked.url) return String(picked.url);
+  }
+  return String(lastGeneratedUrl || '');
+}
+
+function renderGeneratedUrlOptions() {
+  const container = document.getElementById('playlistUrlOptions');
+  if (!container) return;
+
+  if (!Array.isArray(lastGeneratedUrls) || lastGeneratedUrls.length === 0) {
+    container.innerHTML = '';
+    return;
+  }
+
+  const html = lastGeneratedUrls.map((opt) => {
+    const type = String(opt && opt.type ? opt.type : '');
+    const label = escapeHtml(opt && opt.label ? opt.label : type);
+    const note = escapeHtml(opt && opt.note ? opt.note : '');
+    const url = escapeHtml(opt && opt.url ? opt.url : '');
+    const selected = type && type === selectedGeneratedUrlType;
+    const selectedBadge = selected ? '<div class="url-option-selected">已选</div>' : '';
+    const noteHtml = note ? `<div class="url-option-note">${note}</div>` : '';
+
+    return `
+      <div class="url-option ${selected ? 'selected' : ''}" onclick="selectUrlOption('${type}')">
+        <div class="url-option-header">
+          <div class="url-option-title">${label}</div>
+          ${selectedBadge}
+        </div>
+        ${noteHtml}
+        <div class="url-option-url">${url}</div>
+      </div>
+    `;
+  }).join('');
+
+  container.innerHTML = html;
+}
+
+function selectUrlOption(type) {
+  selectedGeneratedUrlType = String(type || '');
+  lastGeneratedUrl = getSelectedGeneratedUrl();
+  renderGeneratedUrlOptions();
 }
 
 async function maybeAutoplayFromUrl() {
@@ -593,8 +644,13 @@ async function generatePlaylist() {
     document.getElementById('playlistCover').src = imageSrc(currentPlaylist.cover);
     document.getElementById('playlistName').textContent = currentPlaylist.name;
     document.getElementById('playlistMeta').textContent = `共 ${currentPlaylist.songCount} 首`;
-    lastGeneratedUrl = (urlRes.data && urlRes.data.url) ? String(urlRes.data.url) : '';
-    document.getElementById('playlistUrl').textContent = lastGeneratedUrl;
+    lastGeneratedUrls = (urlRes.data && Array.isArray(urlRes.data.urls)) ? urlRes.data.urls : [];
+    if (!lastGeneratedUrls.length && urlRes.data && urlRes.data.url) {
+      lastGeneratedUrls = [{ type: 'hls', label: 'HLS', url: String(urlRes.data.url) }];
+    }
+    selectedGeneratedUrlType = (urlRes.data && urlRes.data.default) ? String(urlRes.data.default) : (lastGeneratedUrls[0]?.type || 'hls');
+    lastGeneratedUrl = getSelectedGeneratedUrl();
+    renderGeneratedUrlOptions();
     document.getElementById('resultSection').classList.add('show');
     
     updateFavoriteBtn();
@@ -608,7 +664,8 @@ async function generatePlaylist() {
 }
 
 function copyUrl() {
-  const url = document.getElementById('playlistUrl').textContent;
+  const url = getSelectedGeneratedUrl();
+  if (!url) return;
   navigator.clipboard.writeText(url).then(() => {
     showToast('复制成功');
   });

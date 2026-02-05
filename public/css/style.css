@@ -411,6 +411,64 @@ input:checked + .slider:before {
   line-height: 1.5;
 }
 
+.url-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  margin-bottom: 1.75rem;
+}
+
+.url-option {
+  background: var(--bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
+  padding: 1.1rem;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.url-option:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.url-option.selected {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-md);
+}
+
+.url-option-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.35rem;
+}
+
+.url-option-title {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.url-option-selected {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.url-option-note {
+  font-size: 0.9rem;
+  color: var(--text-dim);
+  margin-bottom: 0.85rem;
+}
+
+.url-option-url {
+  word-break: break-all;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.85rem;
+  color: var(--accent);
+  line-height: 1.5;
+}
+
 .action-buttons {
   display: flex;
   gap: 1rem;

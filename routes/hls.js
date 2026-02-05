@@ -630,9 +630,14 @@ function runFFmpegTranscode({ songId, timestamp, tempAudio, tempCover, tempM3u8,
   return new Promise((resolve, reject) => {
     const segmentDuration = CACHE_CONFIG.segmentDuration;
     const gop = Math.max(1, Math.round(COVER_FPS * segmentDuration));
-    let ffmpegTimeout = null;
+    let stallTimer = null;
     let ffmpegKilled = false;
     let ffmpegError = '';
+    let lastActivityAt = Date.now();
+
+    function markActivity() {
+      lastActivityAt = Date.now();
+    }
     
     const vf = [
       `scale=${COVER_OUTPUT.width}:${COVER_OUTPUT.height}:force_original_aspect_ratio=decrease`,
@@ -680,26 +685,29 @@ function runFFmpegTranscode({ songId, timestamp, tempAudio, tempCover, tempM3u8,
     
     ffmpegProcess.stderr.on('data', (data) => {
       ffmpegError += data.toString();
+      markActivity();
     });
     
-    ffmpegTimeout = setTimeout(() => {
-      if (ffmpegProcess && !ffmpegKilled) {
-        ffmpegKilled = true;
-        ffmpegProcess.kill('SIGKILL');
-        console.error(`[分片缓存] FFmpeg超时被终止: ${songId}`);
-      }
-    }, JOB_LIMITS.ffmpegTimeout);
+    // 用“无输出/无进展超时”替代固定总时长超时：弱机器或长歌转码可能超过固定阈值，但只要持续输出进度就不应被杀。
+    // JOB_LIMITS.ffmpegTimeout 继续由 HLS_FFMPEG_TIMEOUT 控制（默认 180000ms）。
+    stallTimer = setInterval(() => {
+      if (ffmpegKilled) return;
+      if (Date.now() - lastActivityAt <= JOB_LIMITS.ffmpegTimeout) return;
+      ffmpegKilled = true;
+      try { ffmpegProcess.kill('SIGKILL'); } catch (_) {}
+      console.error(`[分片缓存] FFmpeg无输出超时被终止: ${songId}`);
+    }, 1000);
     
     ffmpegProcess.on('error', (err) => {
-      clearTimeout(ffmpegTimeout);
+      clearInterval(stallTimer);
       reject(err);
     });
     
     ffmpegProcess.on('close', (code) => {
-      clearTimeout(ffmpegTimeout);
+      clearInterval(stallTimer);
       
       if (ffmpegKilled) {
-        reject(new Error('FFmpeg处理超时'));
+        reject(new Error('FFmpeg无输出超时'));
         return;
       }
       
