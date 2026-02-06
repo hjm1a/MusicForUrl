@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { playLogOps } = require('../lib/db');
+const { mapRecentPlaylistRows } = require('../lib/history');
 const { auth } = require('../lib/auth');
 
 router.get('/recent', auth, (req, res) => {
@@ -9,19 +10,13 @@ router.get('/recent', auth, (req, res) => {
   const offset = Number.isFinite(rawOffset) && rawOffset >= 0 ? rawOffset : 0;
   
   try {
-    const logs = playLogOps.getRecent.all(req.user.id, limit, offset);
-    const totalResult = playLogOps.count.get(req.user.id);
+    const rows = playLogOps.getRecentPlaylists.all(req.user.id, limit, offset);
+    const totalResult = playLogOps.countRecentPlaylists.get(req.user.id);
     const total = totalResult ? totalResult.count : 0;
 
     res.json({
       success: true,
-      data: logs.map(l => ({
-        songId: l.song_id,
-        songName: l.song_name,
-        artist: l.artist,
-        playlistId: l.playlist_id,
-        playedAt: l.played_at
-      })),
+      data: mapRecentPlaylistRows(rows),
       total
     });
   } catch (e) {

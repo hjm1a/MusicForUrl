@@ -3,14 +3,30 @@ const router = express.Router();
 const netease = require('../lib/netease');
 const { decrypt } = require('../lib/crypto');
 const { playlistOps, userOps } = require('../lib/db');
+const {
+  createPlaybackToken,
+  verifyPlaybackToken,
+  isLegacyToken
+} = require('../lib/playback-token');
 const { auth } = require('../lib/auth');
 
 function isValidNumericId(id) {
   return typeof id === 'string' && /^\d+$/.test(id) && id.length <= 20;
 }
 
-function isValidToken(token) {
-  return typeof token === 'string' && /^[a-f0-9]{32}$/i.test(token);
+function isLikelyToken(token) {
+  return typeof token === 'string' && token.length > 0 && token.length <= 1024;
+}
+
+function resolveUserFromAccessToken(token, playlistId) {
+  const raw = String(token || '');
+  if (isLegacyToken(raw)) {
+    return userOps.getByToken.get(raw) || null;
+  }
+
+  const verified = verifyPlaybackToken(raw, { playlistId: String(playlistId || '') });
+  if (!verified.ok) return null;
+  return userOps.getById.get(verified.userId) || null;
 }
 
 function getBaseUrl(req) {
@@ -113,14 +129,14 @@ router.get('/m3u8/:token/:playlistId/lite.m3u8', async (req, res) => {
   const token = String(req.params.token || '');
   const playlistId = String(req.params.playlistId || '');
 
-  if (!isValidToken(token)) {
+  if (!isLikelyToken(token)) {
     return res.status(400).type('text/plain').send('Invalid token');
   }
   if (!isValidNumericId(playlistId)) {
     return res.status(400).type('text/plain').send('Invalid playlist id');
   }
 
-  const user = userOps.getByToken.get(token);
+  const user = resolveUserFromAccessToken(token, playlistId);
   if (!user) {
     return res.status(401).type('text/plain').send('Token expired');
   }
@@ -229,9 +245,14 @@ router.get('/url', auth, (req, res) => {
     return res.status(400).json({ success: false, message: '无效的歌单ID' });
   }
 
+  const playbackToken = createPlaybackToken({
+    userId: req.user.id,
+    playlistId
+  });
+
   const baseUrl = getBaseUrl(req);
-  const hlsUrl = `${baseUrl}/api/hls/${req.token}/${playlistId}/stream.m3u8`;
-  const liteUrl = `${baseUrl}/api/playlist/m3u8/${req.token}/${playlistId}/lite.m3u8`;
+  const hlsUrl = `${baseUrl}/api/hls/${encodeURIComponent(playbackToken)}/${playlistId}/stream.m3u8`;
+  const liteUrl = `${baseUrl}/api/playlist/m3u8/${encodeURIComponent(playbackToken)}/${playlistId}/lite.m3u8`;
 
   res.json({
     success: true,
@@ -260,7 +281,7 @@ router.get('/url', auth, (req, res) => {
   if (!doPreload) return;
 
   try {
-    const token = req.token;
+    const token = playbackToken;
     const port = process.env.PORT || 3000;
     const preloadBase = process.env.PRELOAD_BASE_URL || `http://127.0.0.1:${port}`;
 

@@ -375,7 +375,7 @@ function imageSrc(url) {
 }
 
 function showToast(message, type = 'success') {
-  if (message !== '复制成功' && message !== '链接已复制') return;
+  if (typeof shouldDisplayToast === 'function' && !shouldDisplayToast(message)) return;
   const toast = document.getElementById('toast');
   if (!toast) return;
   toast.textContent = message;
@@ -848,18 +848,25 @@ function renderHistory() {
   if (!list) return;
   
   if (userHistory.length === 0) {
-    list.innerHTML = '<div class="empty">暂无记录</div>';
+    list.innerHTML = '<div class="empty">暂无最近播放歌单</div>';
     return;
   }
   
   const items = userHistory.map(h => {
-    const safeSongName = escapeHtml(h.songName);
-    const safeArtist = escapeHtml(h.artist);
+    const safeCover = imageSrc(h.cover);
+    const safeName = escapeHtml(h.name || '');
+    const safePlaylistId = escapeHtml(String(h.playlistId || ''));
+    const playedAtText = h.playedAt ? formatTime(h.playedAt) : '刚刚';
+    const playCount = Number(h.playCount || 0);
     return `
       <div class="list-item">
+        <img class="item-cover" src="${safeCover}" alt="" referrerpolicy="no-referrer" loading="lazy">
         <div class="item-info">
-          <div class="item-name">${safeSongName}</div>
-          <div class="item-meta">${safeArtist} • ${formatTime(h.playedAt)}</div>
+          <div class="item-name">${safeName}</div>
+          <div class="item-meta">最近播放 ${playedAtText} • 播放 ${playCount} 次 • ID: ${safePlaylistId}</div>
+        </div>
+        <div class="item-actions">
+          <button class="btn btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="playFavorite('${safePlaylistId}')">获取链接</button>
         </div>
       </div>
     `;

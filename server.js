@@ -1,3 +1,5 @@
+const { ensureEnvFile } = require('./lib/env-check');
+ensureEnvFile();
 require('dotenv').config();
 
 const express = require('express');

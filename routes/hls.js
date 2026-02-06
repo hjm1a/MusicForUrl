@@ -9,13 +9,25 @@ const http = require('http');
 const netease = require('../lib/netease');
 const { decrypt } = require('../lib/crypto');
 const { userOps, playlistOps, playLogOps } = require('../lib/db');
+const { verifyPlaybackToken, isLegacyToken } = require('../lib/playback-token');
 
 function isValidNumericId(id) {
   return typeof id === 'string' && /^\d+$/.test(id) && id.length <= 20;
 }
 
-function isValidToken(token) {
-  return typeof token === 'string' && /^[a-f0-9]{32}$/i.test(token);
+function isLikelyToken(token) {
+  return typeof token === 'string' && token.length > 0 && token.length <= 1024;
+}
+
+function resolveUserFromAccessToken(token, playlistId) {
+  const raw = String(token || '');
+  if (isLegacyToken(raw)) {
+    return userOps.getByToken.get(raw) || null;
+  }
+
+  const verified = verifyPlaybackToken(raw, { playlistId: String(playlistId || '') });
+  if (!verified.ok) return null;
+  return userOps.getById.get(verified.userId) || null;
 }
 
 function isValidSegmentIndex(index) {
@@ -983,14 +995,14 @@ router.get('/:token/:playlistId/stream.m3u8', async (req, res) => {
   const { token, playlistId } = req.params;
   const startIndex = parseInt(req.query.start) || 0;
   
-  if (!isValidToken(token)) {
+  if (!isLikelyToken(token)) {
     return res.status(400).send('#EXTM3U\n#EXT-X-ERROR:Invalid token format');
   }
   if (!isValidNumericId(playlistId)) {
     return res.status(400).send('#EXTM3U\n#EXT-X-ERROR:Invalid playlist ID');
   }
   
-  const user = userOps.getByToken.get(token);
+  const user = resolveUserFromAccessToken(token, playlistId);
   if (!user) {
     return res.status(401).send('#EXTM3U\n#EXT-X-ERROR:Invalid token');
   }
@@ -1074,7 +1086,7 @@ router.get('/:token/:playlistId/stream.m3u8', async (req, res) => {
       for (let segIndex = 0; segIndex < segmentInfo.segmentCount; segIndex++) {
         const segDuration = segmentInfo.segmentDurations[segIndex] || segmentDuration;
         m3u8 += `#EXTINF:${segDuration.toFixed(6)},\n`;
-        m3u8 += `${baseUrl}/api/hls/${token}/${playlistId}/seg/${songId}/${segIndex}.ts\n`;
+        m3u8 += `${baseUrl}/api/hls/${encodeURIComponent(token)}/${playlistId}/seg/${songId}/${segIndex}.ts\n`;
       }
     } else {
       if (songIndex > 0) {
@@ -1088,7 +1100,7 @@ router.get('/:token/:playlistId/stream.m3u8', async (req, res) => {
           ? (songDuration % segmentDuration) || segmentDuration 
           : segmentDuration;
         m3u8 += `#EXTINF:${segDur.toFixed(6)},\n`;
-        m3u8 += `${baseUrl}/api/hls/${token}/${playlistId}/seg/${songId}/${segIndex}.ts\n`;
+        m3u8 += `${baseUrl}/api/hls/${encodeURIComponent(token)}/${playlistId}/seg/${songId}/${segIndex}.ts\n`;
       }
     }
   }
@@ -1112,7 +1124,7 @@ router.get('/:token/:playlistId/seg/:songId/:segmentIndex.ts', async (req, res) 
   const { token, playlistId, songId, segmentIndex } = req.params;
   const segIndex = parseInt(segmentIndex);
   
-  if (!isValidToken(token)) {
+  if (!isLikelyToken(token)) {
     return res.status(400).json({ error: 'Invalid token format' });
   }
   if (!isValidNumericId(playlistId)) {
@@ -1125,7 +1137,7 @@ router.get('/:token/:playlistId/seg/:songId/:segmentIndex.ts', async (req, res) 
     return res.status(400).json({ error: 'Invalid segment index' });
   }
   
-  const user = userOps.getByToken.get(token);
+  const user = resolveUserFromAccessToken(token, playlistId);
   if (!user) {
     return res.status(401).json({ error: 'Invalid token' });
   }
@@ -1284,25 +1296,25 @@ router.get('/:token/:playlistId/seg/:songId/:segmentIndex.ts', async (req, res) 
 router.get('/:token/:playlistId/song/:songId.ts', (req, res) => {
   const { token, playlistId, songId } = req.params;
   
-  if (!isValidToken(token) || !isValidNumericId(playlistId) || !isValidNumericId(songId)) {
+  if (!isLikelyToken(token) || !isValidNumericId(playlistId) || !isValidNumericId(songId)) {
     return res.status(400).json({ error: 'Invalid parameters' });
   }
   
-  res.redirect(`/api/hls/${token}/${playlistId}/seg/${songId}/0.ts`);
+  res.redirect(`/api/hls/${encodeURIComponent(token)}/${playlistId}/seg/${songId}/0.ts`);
 });
 
 router.post('/:token/:playlistId/preload', async (req, res) => {
   const { token, playlistId } = req.params;
   const count = Math.min(parseInt(req.body.count) || 5, 20);
   
-  if (!isValidToken(token)) {
+  if (!isLikelyToken(token)) {
     return res.status(400).json({ error: 'Invalid token format' });
   }
   if (!isValidNumericId(playlistId)) {
     return res.status(400).json({ error: 'Invalid playlist ID' });
   }
   
-  const user = userOps.getByToken.get(token);
+  const user = resolveUserFromAccessToken(token, playlistId);
   if (!user) {
     return res.status(401).json({ error: 'Invalid token' });
   }

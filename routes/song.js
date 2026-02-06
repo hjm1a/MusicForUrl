@@ -3,13 +3,25 @@ const router = express.Router();
 const netease = require('../lib/netease');
 const { decrypt } = require('../lib/crypto');
 const { userOps, playLogOps, playlistOps } = require('../lib/db');
+const { verifyPlaybackToken, isLegacyToken } = require('../lib/playback-token');
 
 function isValidNumericId(id) {
   return typeof id === 'string' && /^\d+$/.test(id) && id.length <= 20;
 }
 
-function isValidToken(token) {
-  return typeof token === 'string' && /^[a-f0-9]{32}$/i.test(token);
+function isLikelyToken(token) {
+  return typeof token === 'string' && token.length > 0 && token.length <= 1024;
+}
+
+function resolveUserFromAccessToken(token, playlistId) {
+  const raw = String(token || '');
+  if (isLegacyToken(raw)) {
+    return userOps.getByToken.get(raw) || null;
+  }
+
+  const verified = verifyPlaybackToken(raw, { playlistId: String(playlistId || '') });
+  if (!verified.ok) return null;
+  return userOps.getById.get(verified.userId) || null;
 }
 
 const urlCache = new Map();
@@ -33,7 +45,7 @@ router.get('/:token/:songId', async (req, res) => {
   const { token, songId } = req.params;
   const { playlist } = req.query;
   
-  if (!isValidToken(token)) {
+  if (!isLikelyToken(token)) {
     return res.status(400).json({ error: '无效的token格式' });
   }
   if (!isValidNumericId(songId)) {
@@ -42,8 +54,11 @@ router.get('/:token/:songId', async (req, res) => {
   if (playlist && !isValidNumericId(playlist)) {
     return res.status(400).json({ error: '无效的歌单ID' });
   }
+  if (!playlist && !isLegacyToken(token)) {
+    return res.status(400).json({ error: '签名链接缺少歌单ID' });
+  }
   
-  const user = userOps.getByToken.get(token);
+  const user = resolveUserFromAccessToken(token, playlist);
   if (!user) {
     return res.status(401).json({ error: '无效的访问令牌' });
   }
