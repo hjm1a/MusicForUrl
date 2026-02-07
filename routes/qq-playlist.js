@@ -3,25 +3,12 @@ const router = express.Router();
 const qqmusic = require('../lib/qqmusic');
 const { decrypt } = require('../lib/crypto');
 const { playlistOps, qqUserOps } = require('../lib/db');
+const { qqAuth } = require('../lib/qq-auth-middleware');
 const {
   createPlaybackToken,
   verifyPlaybackToken,
   isLegacyToken
 } = require('../lib/playback-token');
-
-function qqAuth(req, res, next) {
-  const token = req.headers['x-qq-token'] || req.query.qqtoken;
-  if (!token) {
-    return res.status(401).json({ success: false, message: '请先登录QQ音乐' });
-  }
-  const user = qqUserOps.getByToken.get(token);
-  if (!user) {
-    return res.status(401).json({ success: false, message: 'QQ音乐登录已过期' });
-  }
-  req.qqUser = user;
-  req.qqToken = token;
-  next();
-}
 
 function isLikelyToken(token) {
   return typeof token === 'string' && token.length > 0 && token.length <= 1024;

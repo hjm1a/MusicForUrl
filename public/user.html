@@ -15,30 +15,62 @@
       <div class="view-header">
         <a href="/" class="btn-back">← 返回首页</a>
         <h2>个人中心</h2>
-        <button class="btn btn-ghost" style="margin-left: auto;" onclick="logout()">退出登录</button>
       </div>
 
       <div class="personal-center">
-        <div class="tabs">
-          <button class="tab-btn active" id="tabPlaylists" onclick="switchPersonalTab('playlists')">我的歌单</button>
-          <button class="tab-btn" id="tabFavorites" onclick="switchPersonalTab('favorites')">我的收藏</button>
-          <button class="tab-btn" id="tabHistory" onclick="switchPersonalTab('history')">最近播放</button>
-        </div>
-        
-        <div id="playlistsContent" class="tab-content active">
-          <div id="playlistsList"></div>
-          <div id="playlistsPagination" class="pagination"></div>
+        <div class="profile-platform-tabs">
+          <button class="profile-platform-tab active" id="personalPlatformNetease" onclick="switchPersonalPlatform('netease')">网易云个人中心</button>
+          <button class="profile-platform-tab" id="personalPlatformQQ" onclick="switchPersonalPlatform('qq')">QQ音乐个人中心</button>
         </div>
 
-        <div id="favoritesContent" class="tab-content">
-          <div id="favoritesList"></div>
-          <div id="favoritesPagination" class="pagination"></div>
-        </div>
-        
-        <div id="historyContent" class="tab-content">
-           <div id="historyList"></div>
-           <div id="historyPagination" class="pagination"></div>
-        </div>
+        <section id="neteasePanel" class="platform-panel active">
+          <div id="neteaseAuthState" class="platform-auth-state"></div>
+          <div id="neteaseContent">
+            <div class="tabs">
+              <button class="tab-btn active" id="tabPlaylists" onclick="switchPersonalTab('playlists')">我的歌单</button>
+              <button class="tab-btn" id="tabFavorites" onclick="switchPersonalTab('favorites')">我的收藏</button>
+              <button class="tab-btn" id="tabHistory" onclick="switchPersonalTab('history')">最近播放</button>
+            </div>
+            
+            <div id="playlistsContent" class="tab-content active">
+              <div id="playlistsList"></div>
+              <div id="playlistsPagination" class="pagination"></div>
+            </div>
+
+            <div id="favoritesContent" class="tab-content">
+              <div id="favoritesList"></div>
+              <div id="favoritesPagination" class="pagination"></div>
+            </div>
+            
+            <div id="historyContent" class="tab-content">
+               <div id="historyList"></div>
+               <div id="historyPagination" class="pagination"></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="qqPanel" class="platform-panel">
+          <div id="qqAuthState" class="platform-auth-state"></div>
+          <div id="qqContent">
+            <div class="tabs">
+              <button class="tab-btn-lite active" id="tabQQPlaylists" onclick="switchQQPersonalTab('playlists')">我的歌单</button>
+              <button class="tab-btn-lite" id="tabQQFavorites" onclick="switchQQPersonalTab('favorites')">我的收藏</button>
+              <button class="tab-btn-lite" id="tabQQHistory" onclick="switchQQPersonalTab('history')">最近播放</button>
+            </div>
+            <div id="qqPlaylistsContent" class="qq-tab-content active">
+              <div id="qqPlaylistsList"></div>
+              <div id="qqPlaylistsPagination" class="pagination"></div>
+            </div>
+            <div id="qqFavoritesContent" class="qq-tab-content">
+              <div id="qqFavoritesList"></div>
+              <div id="qqFavoritesPagination" class="pagination"></div>
+            </div>
+            <div id="qqHistoryContent" class="qq-tab-content">
+              <div id="qqHistoryList"></div>
+              <div id="qqHistoryPagination" class="pagination"></div>
+            </div>
+          </div>
+        </section>
       </div>
     </main>
   </div>

@@ -24,10 +24,10 @@
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
   
-  /* Increased Border Radius */
-  --radius-lg: 16px;
-  --radius-md: 10px;
-  --radius-sm: 6px;
+  /* Unified Border Radius */
+  --radius-lg: 12px;
+  --radius-md: 12px;
+  --radius-sm: 12px;
   --radius-full: 9999px;
   
   --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -482,10 +482,83 @@ input:checked + .slider:before {
 .personal-center {
   background: transparent;
   border: none;
-  border-radius: 0;
+  border-radius: var(--radius-md);
   overflow: visible;
   box-shadow: none;
   margin-bottom: 0;
+}
+
+.profile-platform-tabs {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.profile-platform-tab {
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  color: var(--text-dim);
+  border-radius: var(--radius-md);
+  padding: 0.55rem 1rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.profile-platform-tab:hover {
+  color: var(--text);
+  border-color: var(--accent-light);
+}
+
+.profile-platform-tab.active {
+  color: var(--text);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-light) inset;
+}
+
+.platform-panel {
+  display: none;
+}
+
+.platform-panel.active {
+  display: block;
+  animation: fadeIn 0.3s ease;
+}
+
+.platform-auth-state {
+  margin-bottom: 1rem;
+}
+
+.platform-account {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.8rem 1rem;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
+}
+
+.platform-account .account-name {
+  margin-right: auto;
+}
+
+.platform-auth-empty {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  justify-content: space-between;
+  padding: 0.9rem 1rem;
+  background: var(--card-bg);
+  border: 1px dashed var(--card-border);
+  border-radius: var(--radius-md);
+  color: var(--text-dim);
+}
+
+.platform-auth-empty p {
+  margin: 0;
 }
 
 .tabs {
@@ -502,7 +575,7 @@ input:checked + .slider:before {
   padding: 0.8rem 0;
   background: transparent;
   border: none;
-  border-radius: 0;
+  border-radius: var(--radius-md);
   color: var(--text-dim);
   font-weight: 600;
   font-size: 1rem;
@@ -541,6 +614,36 @@ input:checked + .slider:before {
 }
 
 .tab-content.active {
+  display: block;
+  animation: fadeIn 0.3s ease;
+}
+
+.tab-btn-lite {
+  flex: none;
+  padding: 0.8rem 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.tab-btn-lite.active {
+  color: var(--accent);
+}
+
+.tab-btn-lite:hover {
+  color: var(--text);
+}
+
+.qq-tab-content {
+  display: none;
+}
+
+.qq-tab-content.active {
   display: block;
   animation: fadeIn 0.3s ease;
 }

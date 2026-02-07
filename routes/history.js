@@ -10,8 +10,8 @@ router.get('/recent', auth, (req, res) => {
   const offset = Number.isFinite(rawOffset) && rawOffset >= 0 ? rawOffset : 0;
   
   try {
-    const rows = playLogOps.getRecentPlaylists.all(req.user.id, limit, offset);
-    const totalResult = playLogOps.countRecentPlaylists.get(req.user.id);
+    const rows = playLogOps.getRecentPlaylistsNetease.all(req.user.id, limit, offset);
+    const totalResult = playLogOps.countRecentPlaylistsNetease.get(req.user.id);
     const total = totalResult ? totalResult.count : 0;
 
     res.json({

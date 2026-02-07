@@ -2,10 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { favoriteOps } = require('../lib/db');
 const { auth } = require('../lib/auth');
-
-function isValidNumericId(id) {
-  return typeof id === 'string' && /^\d+$/.test(id) && id.length <= 20;
-}
+const { isValidNumericId } = require('../lib/qq-center');
 
 router.get('/', auth, (req, res) => {
   const rawLimit = parseInt(req.query.limit, 10);
@@ -14,8 +11,8 @@ router.get('/', auth, (req, res) => {
   const offset = Number.isFinite(rawOffset) && rawOffset >= 0 ? rawOffset : 0;
 
   try {
-    const favorites = favoriteOps.getByUser.all(req.user.id, limit, offset);
-    const totalResult = favoriteOps.count.get(req.user.id);
+    const favorites = favoriteOps.getByUserNetease.all(req.user.id, limit, offset);
+    const totalResult = favoriteOps.countNetease.get(req.user.id);
     const total = totalResult ? totalResult.count : 0;
     
     res.json({

@@ -202,6 +202,8 @@ app.use('/api/qq/auth/login', authLimiter);
 app.use('/api/qq/auth', require('./routes/qq-auth'));
 app.use('/api/qq/playlist/parse', parseLimiter);
 app.use('/api/qq/playlist', require('./routes/qq-playlist'));
+app.use('/api/qq/favorites', require('./routes/qq-favorite'));
+app.use('/api/qq/history', require('./routes/qq-history'));
 app.use('/api/qq/song', require('./routes/qq-song'));
 
 app.use('/api', (req, res) => {
