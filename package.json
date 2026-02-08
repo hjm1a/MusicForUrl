@@ -31,5 +31,6 @@
     "express-rate-limit": "^8.2.1",
     "NeteaseCloudMusicApi": "^4.24.1",
     "uuid": "^11.0.5"
-  }
+  },
+  "type": "commonjs"
 }
