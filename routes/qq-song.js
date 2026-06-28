@@ -9,6 +9,12 @@ function isLikelyToken(token) {
   return typeof token === 'string' && token.length > 0 && token.length <= 1024;
 }
 
+// CDN 返回的 URL 可能是 http://，在 HTTPS 站点下会被 mixed content 阻止
+function ensureHttpsUrl(url) {
+  if (!url) return url;
+  return url.replace(/^http:\/\//, 'https://');
+}
+
 function resolveQQUserFromAccessToken(token, playlistId) {
   const raw = String(token || '');
   if (isLegacyToken(raw)) {
@@ -37,8 +43,14 @@ function evictOldestUrlCache() {
   }
 }
 
-router.get('/:token/:songMid', async (req, res) => {
-  const { token, songMid } = req.params;
+// FFmpeg/VLC 的 HLS 解析器会检查 segment URL 扩展名，
+// 不在允许列表中的会被拒绝。同时注册带 .mp3 后缀和无后缀两种路由。
+router.get('/:token/:songMid.mp3', handleQQSongRequest);
+router.get('/:token/:songMid', handleQQSongRequest);
+
+async function handleQQSongRequest(req, res) {
+  const token = req.params.token;
+  const songMid = req.params.songMid;
   const { playlist } = req.query;
 
   if (!isLikelyToken(token)) {
@@ -61,30 +73,32 @@ router.get('/:token/:songMid', async (req, res) => {
 
     if (cached && cached.expires > Date.now()) {
       logPlay(user.id, songMid, playlist);
-      return res.redirect(302, cached.url);
+      return res.redirect(302, ensureHttpsUrl(cached.url));
     }
 
     const cookie = decrypt(user.cookie);
     const url = await qqmusic.getSongUrl(songMid, cookie);
 
     if (!url) {
+      console.warn(`[QQ歌曲] 无法获取 songMid=${songMid} userId=${user.id}，可能 cookie 过期或 IP 风控`);
       return res.status(404).json({ error: '无法获取歌曲，可能无版权或需要VIP' });
     }
 
+    const httpsUrl = ensureHttpsUrl(url);
     urlCache.set(cacheKey, {
-      url,
+      url: httpsUrl,
       expires: Date.now() + CACHE_DURATION
     });
     evictOldestUrlCache();
 
     logPlay(user.id, songMid, playlist);
 
-    res.redirect(302, url);
+    res.redirect(302, httpsUrl);
   } catch (e) {
     console.error('获取QQ音乐歌曲URL失败:', e);
     res.status(500).json({ error: '获取歌曲失败' });
   }
-});
+}
 
 async function logPlay(userId, songMid, playlistId) {
   try {

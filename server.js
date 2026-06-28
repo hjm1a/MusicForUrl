@@ -35,7 +35,14 @@ if (trustProxy !== undefined && trustProxy !== null && String(trustProxy).trim()
 app.set('trust proxy', proxyValue);
 
 app.use(cors());
-app.use(compression());
+app.use(compression({
+  filter: (req, res) => {
+    const ct = res.getHeader('Content-Type') || '';
+    // M3U8 播放列表不压缩，避免部分播放器（如 VLC）无法解码 gzip 响应
+    if (String(ct).includes('mpegurl')) return false;
+    return compression.filter(req, res);
+  }
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -100,6 +107,14 @@ const hlsSegmentLimiter = rateLimit({
   }
 });
 
+const mp4Limiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: parseInt(process.env.RATE_LIMIT_MP4) || 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'MP4 请求过于频繁，请稍后再试' }
+});
+
 app.use('/api/', globalLimiter);
 
 app.get('/health', (req, res) => {
@@ -146,6 +161,15 @@ if (process.env.SITE_PASSWORD) {
       return next();
     }
     if (req.path.startsWith('/api/hls/') && !req.path.startsWith('/api/hls/cache')) {
+      return next();
+    }
+    if (req.path.startsWith('/api/qq/hls/') && !req.path.startsWith('/api/qq/hls/cache')) {
+      return next();
+    }
+    if (req.path.startsWith('/api/mp4/')) {
+      return next();
+    }
+    if (req.path.startsWith('/api/qq/mp4/')) {
       return next();
     }
 
@@ -195,6 +219,9 @@ app.use('/api/playlist', require('./routes/playlist'));
 app.use('/api/song', require('./routes/song'));
 app.use('/api/img', require('./routes/img'));
 app.use('/api/hls', hlsStreamLimiter, hlsSegmentLimiter, require('./routes/hls'));
+app.use('/api/qq/hls', hlsStreamLimiter, hlsSegmentLimiter, require('./routes/hls'));
+app.use('/api/mp4', mp4Limiter, require('./routes/mp4'));
+app.use('/api/qq/mp4', mp4Limiter, require('./routes/mp4'));
 app.use('/api/favorites', require('./routes/favorite'));
 app.use('/api/history', require('./routes/history'));
 
